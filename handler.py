@@ -528,13 +528,25 @@ def handler(job):
     output_video_path = None
     logger.info("출력 비디오 검색 중...")
 
+    # FIX: Select the LARGEST video file instead of the first one found.
+    # This prevents picking a short 3s preview clip (node 328) over the
+    # full-length audio-muxed video (node 131). See: github issue #17
+    best_size = 0
     for node_id in videos:
         if videos[node_id]:
-            output_video_path = videos[node_id][0]
-            logger.info(f"노드 {node_id}에서 출력 비디오 발견: {output_video_path}")
-            break
+            for vpath in videos[node_id]:
+                if os.path.exists(vpath):
+                    fsize = os.path.getsize(vpath)
+                    logger.info(f"노드 {node_id} 비디오: {vpath} ({fsize} bytes)")
+                    if fsize > best_size:
+                        best_size = fsize
+                        output_video_path = vpath
+                        logger.info(f"  → 현재 최대 파일로 선택됨")
         else:
             logger.info(f"노드 {node_id}는 비어있음")
+
+    if output_video_path:
+        logger.info(f"✅ 최종 선택된 비디오: {output_video_path} ({best_size} bytes)")
 
     if not output_video_path:
         logger.error("출력 비디오를 찾을 수 없습니다. 모든 노드가 비어있습니다.")
