@@ -7,15 +7,26 @@ RUN apt-get update && apt-get install -y wget unzip build-essential && rm -rf /v
 RUN pip install -U "huggingface_hub[hf_transfer]"
 RUN pip install runpod websocket-client librosa
 
-# TTS & XTTSv2
-RUN pip install TTS
-RUN python -c "from TTS.api import TTS; TTS('tts_models/multilingual/multi-dataset/xtts_v2').to('cpu')"
+# TTS & XTTSv2 — install without deps to avoid conflicting with existing torch
+# Then install only the non-torch TTS runtime requirements
+RUN pip install --upgrade pip setuptools wheel
+RUN pip install --no-deps TTS==0.22.0
+RUN pip install gruut inflect anyascii coqpit einops encodec g2pkk \n    hangul-romanize jamo jieba mecab-python3 num2words phonemizer \n    pysbd trainer bangla bnnumerizer bnunicode
+# Pre-download XTTS model weights (GPU available at runtime, use CPU here for download only)
+RUN python -c "
+import os
+os.environ['COQUI_TOS_AGREED'] = '1'
+from TTS.utils.manage import ModelManager
+manager = ModelManager()
+manager.download_model('tts_models/multilingual/multi-dataset/xtts_v2')
+"
 
 # OpenVoice V2
 RUN git clone https://github.com/myshell-ai/OpenVoice.git /OpenVoice && \
     cd /OpenVoice && \
-    pip install -e .
-RUN pip install git+https://github.com/myshell-ai/MeloTTS.git
+    pip install -e . --no-deps
+RUN pip install git+https://github.com/myshell-ai/MeloTTS.git --no-deps
+RUN pip install mecab-python3 unidic-lite pykakasi
 RUN python -m unidic download
 
 # Download OpenVoice V2 weights
