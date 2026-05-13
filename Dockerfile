@@ -21,7 +21,6 @@ RUN git clone https://github.com/myshell-ai/OpenVoice.git /OpenVoice && \
     pip install -e . --no-deps
 RUN pip install git+https://github.com/myshell-ai/MeloTTS.git --no-deps
 RUN pip install mecab-python3 unidic-lite pykakasi
-RUN python -m unidic download
 
 # Download OpenVoice V2 weights
 RUN mkdir -p /OpenVoice/checkpoints && \
