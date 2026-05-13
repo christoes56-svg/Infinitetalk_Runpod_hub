@@ -1,19 +1,17 @@
 # Use specific version of nvidia cuda image
 FROM wlsdml1114/engui_genai-base_blackwell:1.1 as runtime
 
-# wget 설치 (URL 다운로드를 위해) 및 unzip
-RUN apt-get update && apt-get install -y wget unzip build-essential && rm -rf /var/lib/apt/lists/*
+# System deps
+RUN apt-get update && apt-get install -y wget unzip build-essential espeak-ng && rm -rf /var/lib/apt/lists/*
 
 RUN pip install -U "huggingface_hub[hf_transfer]"
 RUN pip install runpod websocket-client librosa
 
 # TTS & XTTSv2 — install without deps to avoid conflicting with existing torch
-# Then install only the non-torch TTS runtime requirements
 RUN pip install --upgrade pip setuptools wheel
 RUN pip install --no-deps TTS==0.22.0
-RUN pip install gruut inflect anyascii coqpit einops encodec g2pkk \
-    hangul-romanize jamo jieba mecab-python3 num2words phonemizer \
-    pysbd trainer bangla bnnumerizer bnunicode
+# Install only the essential XTTS inference deps (no language-specific packages)
+RUN pip install coqpit einops encodec num2words inflect anyascii pysbd SoundFile
 # Pre-download XTTS model weights
 RUN COQUI_TOS_AGREED=1 python -c "import os; os.environ['COQUI_TOS_AGREED']='1'; from TTS.utils.manage import ModelManager; m=ModelManager(); m.download_model('tts_models/multilingual/multi-dataset/xtts_v2')"
 
