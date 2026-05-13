@@ -11,15 +11,11 @@ RUN pip install runpod websocket-client librosa
 # Then install only the non-torch TTS runtime requirements
 RUN pip install --upgrade pip setuptools wheel
 RUN pip install --no-deps TTS==0.22.0
-RUN pip install gruut inflect anyascii coqpit einops encodec g2pkk \n    hangul-romanize jamo jieba mecab-python3 num2words phonemizer \n    pysbd trainer bangla bnnumerizer bnunicode
-# Pre-download XTTS model weights (GPU available at runtime, use CPU here for download only)
-RUN python -c "
-import os
-os.environ['COQUI_TOS_AGREED'] = '1'
-from TTS.utils.manage import ModelManager
-manager = ModelManager()
-manager.download_model('tts_models/multilingual/multi-dataset/xtts_v2')
-"
+RUN pip install gruut inflect anyascii coqpit einops encodec g2pkk \
+    hangul-romanize jamo jieba mecab-python3 num2words phonemizer \
+    pysbd trainer bangla bnnumerizer bnunicode
+# Pre-download XTTS model weights
+RUN COQUI_TOS_AGREED=1 python -c "import os; os.environ['COQUI_TOS_AGREED']='1'; from TTS.utils.manage import ModelManager; m=ModelManager(); m.download_model('tts_models/multilingual/multi-dataset/xtts_v2')"
 
 # OpenVoice V2
 RUN git clone https://github.com/myshell-ai/OpenVoice.git /OpenVoice && \
