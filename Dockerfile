@@ -1,11 +1,29 @@
 # Use specific version of nvidia cuda image
 FROM wlsdml1114/engui_genai-base_blackwell:1.1 as runtime
 
-# wget 설치 (URL 다운로드를 위해)
-RUN apt-get update && apt-get install -y wget && rm -rf /var/lib/apt/lists/*
+# wget 설치 (URL 다운로드를 위해) 및 unzip
+RUN apt-get update && apt-get install -y wget unzip build-essential && rm -rf /var/lib/apt/lists/*
 
 RUN pip install -U "huggingface_hub[hf_transfer]"
 RUN pip install runpod websocket-client librosa
+
+# TTS & XTTSv2
+RUN pip install TTS
+RUN python -c "from TTS.api import TTS; TTS('tts_models/multilingual/multi-dataset/xtts_v2').to('cpu')"
+
+# OpenVoice V2
+RUN git clone https://github.com/myshell-ai/OpenVoice.git /OpenVoice && \
+    cd /OpenVoice && \
+    pip install -e .
+RUN pip install git+https://github.com/myshell-ai/MeloTTS.git
+RUN python -m unidic download
+
+# Download OpenVoice V2 weights
+RUN mkdir -p /OpenVoice/checkpoints && \
+    wget -q https://myshell-public-repo-hosting.s3.amazonaws.com/openvoice/checkpoints_v2_0417.zip -O /OpenVoice/checkpoints/checkpoints_v2_0417.zip && \
+    cd /OpenVoice/checkpoints && \
+    unzip -q checkpoints_v2_0417.zip && \
+    rm checkpoints_v2_0417.zip
 
 WORKDIR /
 

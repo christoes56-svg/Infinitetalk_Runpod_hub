@@ -276,17 +276,7 @@ def calculate_max_frames_from_audio(wav_path, wav_path_2=None, fps=25):
     return max_frames
 
 
-def handler(job):
-    job_input = job.get("input", {})
-
-    # job_input을 로깅할 때 base64 데이터는 truncate해서 출력
-    log_input = job_input.copy()
-    for key in ["image_base64", "video_base64", "wav_base64", "wav_base64_2"]:
-        if key in log_input:
-            log_input[key] = truncate_base64_for_log(log_input[key])
-
-    logger.info(f"Received job input: {log_input}")
-    task_id = f"task_{uuid.uuid4()}"
+def handle_infinitetalk(job_input, task_id, log_input):
 
     # 입력 타입과 인물 수 확인
     input_type = job_input.get("input_type", "image")  # "image" 또는 "video"
@@ -622,5 +612,125 @@ def handler(job):
             logger.error(f"❌ Base64 인코딩 실패: {e}")
             return {"error": f"Base64 인코딩 실패: {e}"}
 
+def handle_xtts(job_input, task_id):
+    logger.info("Starting XTTS-v2 processing...")
+    import torch
+    from TTS.api import TTS
+    
+    text = job_input.get("text", "Hello, this is a test.")
+    language = job_input.get("language", "en")
+    
+    temp_dir = task_id
+    wav_path = None
+    if "speaker_wav_path" in job_input:
+        wav_path = process_input(job_input["speaker_wav_path"], temp_dir, "speaker.wav", "path")
+    elif "speaker_wav_url" in job_input:
+        wav_path = process_input(job_input["speaker_wav_url"], temp_dir, "speaker.wav", "url")
+    elif "speaker_wav_base64" in job_input:
+        wav_path = process_input(job_input["speaker_wav_base64"], temp_dir, "speaker.wav", "base64")
+        
+    if not wav_path or not os.path.exists(wav_path):
+        return {"error": "speaker_wav is required for XTTS-v2 voice cloning."}
+        
+    output_path = os.path.abspath(os.path.join(temp_dir, f"xtts_output_{task_id}.wav"))
+    
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2").to(device)
+    tts.tts_to_file(text=text, speaker_wav=wav_path, language=language, file_path=output_path)
+    
+    use_network_volume = job_input.get("network_volume", False)
+    if use_network_volume:
+        net_path = f"/runpod-volume/xtts_{task_id}.wav"
+        import shutil
+        shutil.copy2(output_path, net_path)
+        return {"audio_path": net_path}
+    else:
+        with open(output_path, "rb") as f:
+            audio_data = base64.b64encode(f.read()).decode("utf-8")
+        return {"audio": audio_data}
+
+def handle_openvoice(job_input, task_id):
+    logger.info("Starting OpenVoice V2 processing...")
+    import sys
+    if "/OpenVoice" not in sys.path:
+        sys.path.append("/OpenVoice")
+    from openvoice import se_extractor
+    from openvoice.api import ToneColorConverter
+    import torch
+    
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    ckpt_converter = '/OpenVoice/checkpoints/checkpoints_v2_0417/converter'
+    
+    tone_color_converter = ToneColorConverter(f'{ckpt_converter}/config.json', device=device)
+    tone_color_converter.load_ckpt(f'{ckpt_converter}/checkpoint.pth')
+    
+    temp_dir = task_id
+    ref_wav_path = None
+    if "reference_wav_path" in job_input:
+        ref_wav_path = process_input(job_input["reference_wav_path"], temp_dir, "ref.wav", "path")
+    elif "reference_wav_url" in job_input:
+        ref_wav_path = process_input(job_input["reference_wav_url"], temp_dir, "ref.wav", "url")
+    elif "reference_wav_base64" in job_input:
+        ref_wav_path = process_input(job_input["reference_wav_base64"], temp_dir, "ref.wav", "base64")
+        
+    if not ref_wav_path or not os.path.exists(ref_wav_path):
+        return {"error": "reference_wav is required for OpenVoice."}
+        
+    target_se, audio_name = se_extractor.get_se(ref_wav_path, tone_color_converter, vad=True)
+    
+    src_wav_path = None
+    if "source_wav_base64" in job_input:
+        src_wav_path = process_input(job_input["source_wav_base64"], temp_dir, "src.wav", "base64")
+    elif "text" in job_input:
+        from melo.api import TTS as MeloTTS
+        text = job_input["text"]
+        model = MeloTTS(language='EN', device=device)
+        speaker_ids = model.hps.data.spk2id
+        src_wav_path = os.path.join(temp_dir, "melo_base.wav")
+        model.tts_to_file(text, speaker_ids['EN-Default'], src_wav_path, speed=1.0)
+        
+    if not src_wav_path or not os.path.exists(src_wav_path):
+        return {"error": "Provide source_wav or text to generate base audio."}
+        
+    source_se, _ = se_extractor.get_se(src_wav_path, tone_color_converter, vad=True)
+    output_path = os.path.abspath(os.path.join(temp_dir, f"openvoice_output_{task_id}.wav"))
+    
+    tone_color_converter.convert(
+        audio_src_path=src_wav_path, 
+        src_se=source_se, 
+        tgt_se=target_se, 
+        output_path=output_path,
+        message="@MyShell"
+    )
+    
+    use_network_volume = job_input.get("network_volume", False)
+    if use_network_volume:
+        net_path = f"/runpod-volume/openvoice_{task_id}.wav"
+        import shutil
+        shutil.copy2(output_path, net_path)
+        return {"audio_path": net_path}
+    else:
+        with open(output_path, "rb") as f:
+            audio_data = base64.b64encode(f.read()).decode("utf-8")
+        return {"audio": audio_data}
+
+def handler(job):
+    job_input = job.get("input", {})
+    action = job_input.get("action", "infinitetalk")
+
+    log_input = job_input.copy()
+    for key in ["image_base64", "video_base64", "wav_base64", "wav_base64_2", "speaker_wav_base64", "reference_wav_base64", "source_wav_base64"]:
+        if key in log_input:
+            log_input[key] = truncate_base64_for_log(log_input[key])
+
+    logger.info(f"Received job input for action '{action}': {log_input}")
+    task_id = f"task_{uuid.uuid4()}"
+    
+    if action == "xtts":
+        return handle_xtts(job_input, task_id)
+    elif action == "openvoice":
+        return handle_openvoice(job_input, task_id)
+    else:
+        return handle_infinitetalk(job_input, task_id, log_input)
 
 runpod.serverless.start({"handler": handler})
