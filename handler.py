@@ -614,7 +614,8 @@ def handle_infinitetalk(job_input, task_id, log_input):
 
 def handle_xtts(job_input, task_id):
     logger.info("Starting XTTS-v2 processing...")
-    import torch
+    import os, torch
+    os.environ['COQUI_TOS_AGREED'] = '1'
     from TTS.api import TTS
     
     text = job_input.get("text", "Hello, this is a test.")

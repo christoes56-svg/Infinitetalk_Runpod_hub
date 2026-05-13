@@ -12,8 +12,8 @@ RUN pip install --upgrade pip setuptools wheel
 RUN pip install --no-deps TTS==0.22.0
 # Install only the essential XTTS inference deps (no language-specific packages)
 RUN pip install coqpit einops encodec num2words inflect anyascii pysbd SoundFile
-# Pre-download XTTS model weights
-RUN COQUI_TOS_AGREED=1 python -c "import os; os.environ['COQUI_TOS_AGREED']='1'; from TTS.utils.manage import ModelManager; m=ModelManager(); m.download_model('tts_models/multilingual/multi-dataset/xtts_v2')"
+# NOTE: XTTS model weights (~2GB) are downloaded on first use to /root/.local/share/tts
+# Pre-populate your RunPod Network Volume with the model to avoid cold-start delays
 
 # OpenVoice V2
 RUN git clone https://github.com/myshell-ai/OpenVoice.git /OpenVoice && \
