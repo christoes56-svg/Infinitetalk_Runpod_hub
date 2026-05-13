@@ -658,10 +658,20 @@ def handle_openvoice(job_input, task_id):
     from openvoice import se_extractor
     from openvoice.api import ToneColorConverter
     import torch
-    
+
     device = "cuda" if torch.cuda.is_available() else "cpu"
     ckpt_converter = '/OpenVoice/checkpoints/checkpoints_v2_0417/converter'
-    
+
+    # Auto-download checkpoints from HuggingFace if not present
+    if not os.path.exists(ckpt_converter):
+        logger.info("Downloading OpenVoice V2 checkpoints from HuggingFace...")
+        from huggingface_hub import snapshot_download
+        snapshot_download(
+            repo_id="myshell-ai/OpenVoiceV2",
+            local_dir="/OpenVoice/checkpoints/checkpoints_v2_0417",
+            ignore_patterns=["*.md", "*.txt"]
+        )
+
     tone_color_converter = ToneColorConverter(f'{ckpt_converter}/config.json', device=device)
     tone_color_converter.load_ckpt(f'{ckpt_converter}/checkpoint.pth')
     

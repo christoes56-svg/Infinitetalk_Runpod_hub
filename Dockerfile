@@ -21,13 +21,8 @@ RUN git clone https://github.com/myshell-ai/OpenVoice.git /OpenVoice && \
     pip install -e . --no-deps
 RUN pip install git+https://github.com/myshell-ai/MeloTTS.git --no-deps
 RUN pip install mecab-python3 unidic-lite pykakasi
-
-# Download OpenVoice V2 weights
-RUN mkdir -p /OpenVoice/checkpoints && \
-    wget -q https://myshell-public-repo-hosting.s3.amazonaws.com/openvoice/checkpoints_v2_0417.zip -O /OpenVoice/checkpoints/checkpoints_v2_0417.zip && \
-    cd /OpenVoice/checkpoints && \
-    unzip -q checkpoints_v2_0417.zip && \
-    rm checkpoints_v2_0417.zip
+# NOTE: OpenVoice V2 checkpoints are downloaded from HuggingFace on first use
+# They are cached to /OpenVoice/checkpoints/checkpoints_v2_0417/
 
 WORKDIR /
 
